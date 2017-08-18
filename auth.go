@@ -22,10 +22,6 @@ const (
 	StatusInactive = false
 	// StatusActive represent user with active status
 	StatusActive = true
-	// StatusNotPremium represent user with not premium status
-	StatusNotPremium = false
-	// StatusPremium represent user with premium status
-	StatusPremium = true
 )
 
 var (
@@ -86,7 +82,7 @@ func (mod *Module) CreateNewUser(data UserModel) (UserModel, error) {
 		Find(db.Cond{"username": data.GetUsername()}).Count(); total != 0 {
 		return data, ErrUserDuplicate
 	}
-	// making sure user is not active and not premium
+	// making sure user is not active and created time is utc.now
 	data.SetIsActive(StatusInactive)
 	data.SetCreatedTime(time.Now().UTC())
 	// storing data
