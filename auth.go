@@ -8,8 +8,6 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/gin-contrib/sessions"
-	db "upper.io/db.v3"
-	"upper.io/db.v3/lib/sqlbuilder"
 )
 
 const (
@@ -48,9 +46,19 @@ type UserModel interface {
 	TableName() string
 }
 
+// Repository talk to database
+type Repository interface {
+	Find(uint64) (UserModel, error)
+	FindByUsername(string) (UserModel, error)
+	FindAll() ([]UserModel, error)
+	Store(UserModel) (UserModel, error)
+	Update(UserModel) (UserModel, error)
+	Remove(uint64) error
+}
+
 // Module for Authentication
 type Module struct {
-	db      sqlbuilder.Database
+	repo    Repository
 	session sessions.Session
 }
 
@@ -66,8 +74,8 @@ func init() {
 }
 
 // New create new Authentication Module
-func New(db sqlbuilder.Database) Module {
-	return Module{db: db}
+func New(repo Repository) Module {
+	return Module{repo: repo}
 }
 
 // UpdateSession replacing current sessions.Session in the module
@@ -76,50 +84,44 @@ func (mod *Module) UpdateSession(sess sessions.Session) {
 }
 
 // CreateNewUser storing new user data into repository
-func (mod *Module) CreateNewUser(data UserModel) (UserModel, error) {
+func (mod *Module) CreateNewUser(user UserModel) (UserModel, error) {
+	var err error
 	// check username exist
-	if total, _ := mod.db.Collection(data.TableName()).
-		Find(db.Cond{"username": data.GetUsername()}).Count(); total != 0 {
-		return data, ErrUserDuplicate
+	if _, err = mod.repo.FindByUsername(user.GetUsername()); err != ErrNotFound {
+		return user, ErrUserDuplicate
 	}
 	// making sure user is not active and created time is utc.now
-	data.SetIsActive(StatusInactive)
-	data.SetCreatedTime(time.Now().UTC())
+	user.SetIsActive(StatusInactive)
+	user.SetCreatedTime(time.Now().UTC())
 	// storing data
-	if _, err := mod.db.Collection(data.TableName()).
-		Insert(&data); err != nil {
-		return data, err
+	if user, err = mod.repo.Store(user); err != nil {
+		return user, err
 	}
-	return data, nil
+	return user, nil
 }
 
 // Authenticate verify username and password is match with bcrypt Encryption
-func (mod *Module) Authenticate(data UserModel, password string) (UserModel, error) {
+func (mod *Module) Authenticate(user UserModel, password string) (UserModel, error) {
 	// check username exist and active
-	if err := mod.db.Collection(data.TableName()).
-		Find(db.Cond{"username": data.GetUsername(), "deleted_at": nil}).
-		One(&data); err != nil {
-		if err == db.ErrNoMoreRows {
-			return data, ErrNotFound
-		}
-		return data, err
+	if user, err := mod.repo.FindByUsername(user.GetUsername()); err != nil {
+		return user, err
 	}
-	if !data.GetIsActive() {
-		return data, ErrInactive
+	if !user.GetIsActive() {
+		return user, ErrInactive
 	}
 	// compare []byte(password) and []byte(user.Password) data
-	if err := bcrypt.CompareHashAndPassword(data.GetPassword(), []byte(password)); err != nil {
-		return data, ErrMissmatch
+	if err := bcrypt.CompareHashAndPassword(user.GetPassword(), []byte(password)); err != nil {
+		return user, ErrMissmatch
 	}
 	// storing into session
 	mod.session.Set(USER, User{
-		UserID:    data.GetID(),
-		Username:  data.GetUsername(),
-		FirstName: data.GetFirstName(),
-		LastName:  data.GetLastName(),
+		UserID:    user.GetID(),
+		Username:  user.GetUsername(),
+		FirstName: user.GetFirstName(),
+		LastName:  user.GetLastName(),
 	})
 	err := mod.session.Save()
-	return data, err
+	return user, err
 }
 
 // Deauthenticate delete user from current session
