@@ -35,6 +35,7 @@ var (
 
 // UserModel data
 type UserModel interface {
+	SetID(uint64)
 	SetIsActive(bool)
 	SetCreatedTime(time.Time)
 	GetID() uint64
