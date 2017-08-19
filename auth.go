@@ -103,15 +103,16 @@ func (mod *Module) CreateNewUser(user UserModel) (UserModel, error) {
 
 // Authenticate verify username and password is match with bcrypt Encryption
 func (mod *Module) Authenticate(user UserModel, password string) (UserModel, error) {
+	var err error
 	// check username exist and active
-	if user, err := mod.repo.FindByUsername(user.GetUsername()); err != nil {
+	if user, err = mod.repo.FindByUsername(user.GetUsername()); err != nil {
 		return user, err
 	}
 	if !user.GetIsActive() {
 		return user, ErrInactive
 	}
 	// compare []byte(password) and []byte(user.Password) data
-	if err := bcrypt.CompareHashAndPassword(user.GetPassword(), []byte(password)); err != nil {
+	if err = bcrypt.CompareHashAndPassword(user.GetPassword(), []byte(password)); err != nil {
 		return user, ErrMissmatch
 	}
 	// storing into session
@@ -121,7 +122,7 @@ func (mod *Module) Authenticate(user UserModel, password string) (UserModel, err
 		FirstName: user.GetFirstName(),
 		LastName:  user.GetLastName(),
 	})
-	err := mod.session.Save()
+	err = mod.session.Save()
 	return user, err
 }
 
