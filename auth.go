@@ -16,21 +16,25 @@ const (
 )
 
 const (
-	// StatusInactive represent user with inactive status
-	StatusInactive = false
 	// StatusActive represent user with active status
 	StatusActive = true
+	// StatusInactive represent user with inactive status
+	StatusInactive = false
 )
 
 var (
-	// ErrMissmatch displaying error message when user failed to be authenticated
-	ErrMissmatch = errors.New("missmatch username / password combination")
-	// ErrUserDuplicate displaying error message when the same user has been registered
-	ErrUserDuplicate = errors.New("user duplicate")
-	// ErrNotFound displaying error message when user has not been found
-	ErrNotFound = errors.New("user not found")
+	// ErrAlreadyActived displaying error messeage when user has already activated
+	ErrAlreadyActived = errors.New("user already actived")
+	// ErrAlreadyInactived displaying error messeage when user has already Inactivated
+	ErrAlreadyInactived = errors.New("user already inactived")
 	// ErrInactive displaying error message when user has inactive status
 	ErrInactive = errors.New("inactive user")
+	// ErrMissmatch displaying error message when user failed to be authenticated
+	ErrMissmatch = errors.New("missmatch username / password combination")
+	// ErrNotFound displaying error message when user has not been found
+	ErrNotFound = errors.New("user not found")
+	// ErrUserDuplicate displaying error message when the same user has been registered
+	ErrUserDuplicate = errors.New("user duplicate")
 )
 
 // UserModel data
@@ -79,26 +83,13 @@ func New(repo Repository) Module {
 	return Module{repo: repo}
 }
 
-// UpdateSession replacing current sessions.Session in the module
-func (mod *Module) UpdateSession(sess sessions.Session) {
-	mod.session = sess
-}
-
-// CreateNewUser storing new user data into repository
-func (mod *Module) CreateNewUser(user UserModel) (UserModel, error) {
-	var err error
-	// check username exist
-	if _, err = mod.repo.FindByUsername(user.GetUsername()); err != ErrNotFound {
-		return user, ErrUserDuplicate
+// ActivateUser set inactive user as active
+func (mod *Module) ActivateUser(user UserModel) (UserModel, error) {
+	if user.GetIsActive() {
+		return user, ErrAlreadyActived
 	}
-	// making sure user is not active and created time is utc.now
-	user.SetIsActive(StatusInactive)
-	user.SetCreatedTime(time.Now().UTC())
-	// storing data
-	if user, err = mod.repo.Store(user); err != nil {
-		return user, err
-	}
-	return user, nil
+	user.SetIsActive(true)
+	return mod.repo.Update(user)
 }
 
 // Authenticate verify username and password is match with bcrypt Encryption
@@ -126,6 +117,32 @@ func (mod *Module) Authenticate(user UserModel, password string) (UserModel, err
 	return user, err
 }
 
+// CreateNewUser storing new user data into repository
+func (mod *Module) CreateNewUser(user UserModel) (UserModel, error) {
+	var err error
+	// check username exist
+	if _, err = mod.repo.FindByUsername(user.GetUsername()); err != ErrNotFound {
+		return user, ErrUserDuplicate
+	}
+	// making sure user is not active and created time is utc.now
+	user.SetIsActive(StatusInactive)
+	user.SetCreatedTime(time.Now().UTC())
+	// storing data
+	if user, err = mod.repo.Store(user); err != nil {
+		return user, err
+	}
+	return user, nil
+}
+
+// DeactivateUser set inactive user as Deactived
+func (mod *Module) DeactivatedUser(user UserModel) (UserModel, error) {
+	if !user.GetIsActive() {
+		return user, ErrAlreadyInactived
+	}
+	user.SetIsActive(false)
+	return mod.repo.Update(user)
+}
+
 // Deauthenticate delete user from current session
 func (mod *Module) Deauthenticate() error {
 	mod.session.Delete(USER)
@@ -140,6 +157,11 @@ func (mod *Module) IsAuthenticated() bool {
 		return false
 	}
 	return model.UserID != 0
+}
+
+// UpdateSession replacing current sessions.Session in the module
+func (mod *Module) UpdateSession(sess sessions.Session) {
+	mod.session = sess
 }
 
 // User returning user data from session
